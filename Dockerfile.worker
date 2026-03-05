@@ -1,0 +1,32 @@
+# ============================================
+# RESU-GENIE Worker Dockerfile
+# Separate image for the SQS consumer worker.
+# Runs: python backend/worker/worker.py
+# ============================================
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# System deps (PyMuPDF needs libmupdf)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libffi-dev \
+    libmupdf-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps (same requirements as API)
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ .
+
+# Non-root user
+RUN useradd --create-home appuser && chown -R appuser /app
+USER appuser
+
+# Worker entry point (NOT gunicorn — this is a long-running consumer)
+CMD ["python", "worker/worker.py"]

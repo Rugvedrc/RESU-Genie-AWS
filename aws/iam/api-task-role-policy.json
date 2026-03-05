@@ -1,0 +1,77 @@
+{
+    "_comment": "IAM Policy for ECS API Task Role (resu-genie-api-task-role)",
+    "_principle": "Least privilege: the API only needs what it directly calls. It never processes files or runs Bedrock parsing — the Worker does that.",
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "_comment": "S3: API only generates presigned PUT URLs (signObject). It does NOT read/write raw files.",
+            "Sid": "S3PresignedUpload",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": "arn:aws:s3:::resu-genie-resumes/raw/*"
+        },
+        {
+            "_comment": "S3: API reads results/ to serve analysis data to frontend.",
+            "Sid": "S3ReadResults",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::resu-genie-resumes/results/*"
+        },
+        {
+            "_comment": "SQS: API publishes jobs. It does NOT consume messages.",
+            "Sid": "SQSPublishOnly",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:SendMessage",
+                "sqs:GetQueueUrl"
+            ],
+            "Resource": "arn:aws:sqs:us-east-1:ACCOUNT_ID:resu-genie-jobs"
+        },
+        {
+            "_comment": "DynamoDB: API reads job status and lists resumes.",
+            "Sid": "DynamoDBReadWrite",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:Scan"
+            ],
+            "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/resu-genie-metadata"
+        },
+        {
+            "_comment": "Bedrock: API calls Claude for chat responses only.",
+            "Sid": "BedrockChatOnly",
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel"
+            ],
+            "Resource": [
+                "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+                "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+            ]
+        },
+        {
+            "_comment": "OpenSearch Serverless: API queries for RAG (chat context retrieval).",
+            "Sid": "OpenSearchQuery",
+            "Effect": "Allow",
+            "Action": [
+                "aoss:APIAccessAll"
+            ],
+            "Resource": "arn:aws:aoss:us-east-1:ACCOUNT_ID:collection/*"
+        },
+        {
+            "_comment": "Secrets Manager: retrieve runtime config if needed.",
+            "Sid": "SecretsReadOnly",
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:GetSecretValue"
+            ],
+            "Resource": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:resu-genie/*"
+        }
+    ]
+}

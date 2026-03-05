@@ -1,0 +1,68 @@
+{
+    "_comment": "IAM Policy for ECS Worker Task Role (resu-genie-worker-task-role)",
+    "_principle": "Worker needs different permissions than the API. It reads raw files, runs full Bedrock parsing, writes embeddings, and acks SQS messages. It does NOT serve HTTP or generate presigned URLs.",
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "_comment": "S3: Worker downloads raw uploaded files to process.",
+            "Sid": "S3ReadRaw",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::resu-genie-resumes/raw/*"
+        },
+        {
+            "_comment": "S3: Worker writes full analysis JSON to results/.",
+            "Sid": "S3WriteResults",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": "arn:aws:s3:::resu-genie-resumes/results/*"
+        },
+        {
+            "_comment": "SQS: Worker receives AND deletes messages. No SendMessage needed.",
+            "Sid": "SQSConsumeOnly",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:ChangeMessageVisibility"
+            ],
+            "Resource": "arn:aws:sqs:us-east-1:ACCOUNT_ID:resu-genie-jobs"
+        },
+        {
+            "_comment": "DynamoDB: Worker writes job status (pending→processing→complete/failed).",
+            "Sid": "DynamoDBWrite",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem"
+            ],
+            "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/resu-genie-metadata"
+        },
+        {
+            "_comment": "Bedrock: Worker calls Claude (parse) and Titan (embed). Both needed.",
+            "Sid": "BedrockFullAccess",
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel"
+            ],
+            "Resource": [
+                "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+                "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+            ]
+        },
+        {
+            "_comment": "OpenSearch: Worker indexes (write) chunks. Needs write access.",
+            "Sid": "OpenSearchWrite",
+            "Effect": "Allow",
+            "Action": [
+                "aoss:APIAccessAll"
+            ],
+            "Resource": "arn:aws:aoss:us-east-1:ACCOUNT_ID:collection/*"
+        }
+    ]
+}

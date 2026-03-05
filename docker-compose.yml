@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # ECS API SERVICE (Flask + Gunicorn)
+  # Handles: presign URLs, job submission, chat, status polling
+  # IAM Needs: s3:PutObject (presign only), sqs:SendMessage,
+  #            dynamodb:GetItem, bedrock:InvokeModel, es:ESHttp*
+  # ============================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=development
+    volumes:
+      - ./backend:/app # hot-reload in dev
+    restart: unless-stopped
+    depends_on:
+      - localstack
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================================
+  # ECS WORKER SERVICE (SQS Consumer)
+  # Handles: download from S3, Bedrock parsing, OpenSearch embed
+  # IAM Needs: sqs:ReceiveMessage + DeleteMessage,
+  #            s3:GetObject (raw/), s3:PutObject (results/),
+  #            dynamodb:PutItem, bedrock:InvokeModel, es:ESHttp*
+  # Note: DIFFERENT task role from API service (least privilege)
+  # ============================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=development
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    depends_on:
+      - api
+      - localstack
+
+  # ============================================================
+  # FRONTEND (Nginx serving Vite build)
+  # ============================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # ============================================================
+  # LOCALSTACK — Local AWS emulation (dev only)
+  # Emulates: S3, SQS, DynamoDB so you can develop without AWS.
+  # Set AWS_ENDPOINT_URL=http://localstack:4566 for local boto3.
+  # ============================================================
+  localstack:
+    image: localstack/localstack:3.4
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,sqs,dynamodb
+      - DEFAULT_REGION=us-east-1
+      - DEBUG=0
+    volumes:
+      - localstack_data:/var/lib/localstack
+    restart: unless-stopped
+
+volumes:
+  localstack_data:
